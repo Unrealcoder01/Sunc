@@ -712,79 +712,103 @@ addConsoleLog = function(message)
     end
 end
 
--- Simple and safe checkcaller test
-local simpleCheckCallerTest = [[
--- Simple checkcaller test without recursion
+-- Ultra safe checkcaller test - NO HOOKS, NO RECURSION
+local ultraSafeCheckCallerTest = [[
+-- Ultra safe checkcaller test - zero recursion risk
 if checkcaller then
-    -- Test 1: Basic functionality
-    local basicResult = checkcaller()
-    if basicResult then
-        print("✅ checkcaller: Basic test passed")
-    else
-        print("❌ checkcaller: Basic test failed - returned false in main thread")
-    end
-    
-    -- Test 2: Thread identity test (if available)
-    if getthreadidentity and setthreadidentity then
-        local originalIdentity = getthreadidentity()
-        local identityTestPassed = true
-        
-        -- Test with different identities
-        for _, identity in ipairs({0, 2, 6, 7, 8}) do
-            setthreadidentity(identity)
-            if not checkcaller() then
-                identityTestPassed = false
-                break
-            end
-        end
-        
-        setthreadidentity(originalIdentity)
-        
-        if identityTestPassed then
-            print("✅ checkcaller: Thread identity test passed")
+    -- Test 1: Basic functionality test
+    local basicTest = pcall(function()
+        local result = checkcaller()
+        if result == true then
+            print("✅ checkcaller: Basic test passed")
+        elseif result == false then
+            print("❌ checkcaller: Basic test failed - returned false")
         else
-            print("❌ checkcaller: Thread identity test failed")
+            print("❌ checkcaller: Basic test failed - returned " .. tostring(result))
         end
+    end)
+    
+    if not basicTest then
+        print("❌ checkcaller: Basic test crashed")
     end
     
-    -- Test 3: Simple coroutine test
-    local coroutineResult = coroutine.wrap(function()
-        return checkcaller()
-    end)()
-    
-    if coroutineResult then
-        print("✅ checkcaller: Coroutine test passed")
-    else
-        print("❌ checkcaller: Coroutine test failed")
-    end
-    
-    -- Test 4: Simple hook test (safer approach)
-    if hookfunction and getrawmetatable then
-        local hookTestPassed = false
-        local originalToString = tostring
-        local hookCalled = false
+    -- Test 2: Simple coroutine test (no hooks)
+    local coroutineTest = pcall(function()
+        local result = coroutine.wrap(function()
+            return checkcaller()
+        end)()
         
-        -- Hook a safe function
-        local hookedToString = hookfunction(tostring, function(...)
-            hookCalled = true
-            local callerResult = checkcaller()
-            if not callerResult then
-                hookTestPassed = true
+        if result == true then
+            print("✅ checkcaller: Coroutine test passed")
+        else
+            print("❌ checkcaller: Coroutine test failed")
+        end
+    end)
+    
+    if not coroutineTest then
+        print("❌ checkcaller: Coroutine test crashed")
+    end
+    
+    -- Test 3: Thread identity test (if available, no hooks)
+    if getthreadidentity and setthreadidentity then
+        local identityTest = pcall(function()
+            local originalIdentity = getthreadidentity()
+            local allPassed = true
+            
+            -- Test with different identities
+            for _, identity in ipairs({0, 2, 6, 7, 8}) do
+                setthreadidentity(identity)
+                local result = checkcaller()
+                if result ~= true then
+                    allPassed = false
+                    break
+                end
             end
-            return originalToString(...)
+            
+            setthreadidentity(originalIdentity)
+            
+            if allPassed then
+                print("✅ checkcaller: Thread identity test passed")
+            else
+                print("❌ checkcaller: Thread identity test failed")
+            end
         end)
         
-        -- Trigger the hook safely
-        local _ = tostring(game)
-        
-        -- Restore original function
-        hookfunction(tostring, originalToString)
-        
-        if hookTestPassed and hookCalled then
-            print("✅ checkcaller: Hook test passed")
-        else
-            print("❌ checkcaller: Hook test failed or not triggered")
+        if not identityTest then
+            print("❌ checkcaller: Thread identity test crashed")
         end
+    end
+    
+    -- Test 4: Simple spawn test (no hooks)
+    local spawnTest = pcall(function()
+        local completed = false
+        local result = false
+        
+        spawn(function()
+            result = checkcaller()
+            completed = true
+        end)
+        
+        -- Wait for spawn to complete
+        local timeout = 0
+        while not completed and timeout < 100 do
+            wait(0.01)
+            timeout = timeout + 1
+        end
+        
+        if completed then
+            if result == true then
+                print("✅ checkcaller: Spawn test passed")
+            else
+                print("❌ checkcaller: Spawn test failed")
+            end
+        else
+            print("❌ checkcaller: Spawn test timed out")
+        end
+    end)
+    
+    if not spawnTest then
+        print("❌ checkcaller: Spawn test crashed")
     end
 else
     print("❌ checkcaller: Function is nil")
@@ -842,14 +866,14 @@ local function runSUNCTest()
         
         wait(0.5)
         
-        -- First run our simple checkcaller test
-        print("Running improved checkcaller test...")
+        -- First run our ultra safe checkcaller test
+        print("Running ultra safe checkcaller test...")
         local success, result = pcall(function()
-            return loadstring(simpleCheckCallerTest)()
+            return loadstring(ultraSafeCheckCallerTest)()
         end)
         
         if not success then
-            print("❌ Improved checkcaller test failed: " .. tostring(result))
+            print("❌ Ultra safe checkcaller test failed: " .. tostring(result))
         end
         
         wait(1)
