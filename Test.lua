@@ -25,6 +25,7 @@ local timeElapsed = 0
 local isTestingActive = false
 local functionLogs = {}
 local currentProgress = 0
+local processedFunctions = {} -- Track which functions we've already processed
 
 -- Create main ScreenGui
 local screenGui = Instance.new("ScreenGui")
@@ -461,6 +462,27 @@ local updateStats
 local originalPrint = print
 local consoleOutput = {}
 
+-- Function to extract function name from message
+local function extractFunctionName(message)
+    -- Try to extract function name from various message formats
+    local patterns = {
+        "([%w_%.]+)%s*:%s*[✅❌]",  -- functionname: ✅ or ❌
+        "([%w_%.]+)%s*[✅❌]",      -- functionname ✅ or ❌
+        "Testing%s+([%w_%.]+)",     -- Testing functionname
+        "Checking%s+([%w_%.]+)",    -- Checking functionname
+        "^([%w_%.]+)%s*$"           -- Just the function name
+    }
+    
+    for _, pattern in ipairs(patterns) do
+        local funcName = message:match(pattern)
+        if funcName then
+            return funcName:lower()
+        end
+    end
+    
+    return nil
+end
+
 -- Override print to capture output
 print = function(...)
     local args = {...}
@@ -510,12 +532,14 @@ end
 
 -- Update progress animation
 updateProgress = function(current, total)
-    local percentage = math.floor((current / total) * 100)
+    -- Ensure we don't exceed 100%
+    local cappedCurrent = math.min(current, total)
+    local percentage = math.floor((cappedCurrent / total) * 100)
     currentProgress = percentage
     
     -- Update text
     progressText.Text = percentage .. "%"
-    progressSubtext.Text = current .. "/" .. total
+    progressSubtext.Text = cappedCurrent .. "/" .. total
     
     -- Animate progress circle
     local progressTween = TweenService:Create(progressStroke, PROGRESS_TWEEN, {
@@ -546,6 +570,16 @@ addConsoleLog = function(message)
     logCorner.CornerRadius = UDim.new(0, 4)
     logCorner.Parent = logFrame
     
+    -- Extract function name to avoid double counting
+    local functionName = extractFunctionName(message)
+    local shouldCount = true
+    
+    if functionName and processedFunctions[functionName] then
+        shouldCount = false -- Don't count this function again
+    elseif functionName then
+        processedFunctions[functionName] = true
+    end
+    
     -- Status indicator based on message content
     local statusIndicator = Instance.new("TextLabel")
     statusIndicator.Size = UDim2.new(0, 30, 1, 0)
@@ -555,14 +589,19 @@ addConsoleLog = function(message)
     if message:find("✅") then
         statusIndicator.Text = "✅"
         statusIndicator.TextColor3 = Color3.fromRGB(100, 255, 100)
-        testResults.passed = testResults.passed + 1
+        if shouldCount then
+            testResults.passed = testResults.passed + 1
+        end
     elseif message:find("❌") then
         statusIndicator.Text = "❌"
         statusIndicator.TextColor3 = Color3.fromRGB(255, 100, 100)
-        testResults.failed = testResults.failed + 1
+        if shouldCount then
+            testResults.failed = testResults.failed + 1
+        end
     else
         statusIndicator.Text = "ℹ️"
         statusIndicator.TextColor3 = Color3.fromRGB(100, 200, 255)
+        shouldCount = false -- Don't count info messages
     end
     
     statusIndicator.TextSize = 16
@@ -609,7 +648,7 @@ addConsoleLog = function(message)
     -- Update stats
     updateStats()
     
-    -- Update progress based on total functions tested
+    -- Update progress based on total functions tested (capped at total)
     local totalTested = testResults.passed + testResults.failed
     updateProgress(totalTested, testResults.total)
 end
@@ -625,6 +664,7 @@ local function runSUNCTest()
     -- Reset results
     testResults = {passed = 0, timeout = 0, failed = 0, total = 90}
     functionLogs = {}
+    processedFunctions = {} -- Reset processed functions tracker
     timeElapsed = 0
     currentProgress = 0
     
@@ -687,8 +727,12 @@ local function runSUNCTest()
         print("🏁 SUNC test completed!")
         print("📈 Check the console and GUI for detailed results")
         
-        -- If no results were captured, show completion
-        if testResults.passed + testResults.failed == 0 then
+        -- Ensure progress shows completion correctly
+        local totalTested = testResults.passed + testResults.failed
+        if totalTested > 0 then
+            updateProgress(totalTested, testResults.total)
+        else
+            -- If no results were captured, show completion at 100%
             updateProgress(90, 90)
             progressText.Text = "100%"
             progressSubtext.Text = "90/90"
@@ -721,7 +765,7 @@ mainFrame.InputBegan:Connect(function(input)
                 dragging = false
                 connection:Disconnect()
             end
-        end)
+        end
     end
 end)
 
