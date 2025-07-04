@@ -27,6 +27,32 @@ local functionLogs = {}
 local currentProgress = 0
 local processedFunctions = {} -- Track which functions we've already processed
 
+-- Known SUNC function list for better detection
+local suncFunctions = {
+    "checkcaller", "debug.getconstants", "debug.getinfo", "debug.getlocal", "debug.getlocals",
+    "debug.getregistry", "debug.getstack", "debug.getupvalue", "debug.getupvalues", "debug.setconstant",
+    "debug.setlocal", "debug.setupvalue", "debug.traceback", "getgc", "getgenv", "getloadedmodules",
+    "getrenv", "getrunningscripts", "getsenv", "getthreadidentity", "setthreadidentity", "syn_checkcaller",
+    "syn_getgenv", "syn_getrenv", "syn_getsenv", "syn_getloadedmodules", "syn_getrunningscripts",
+    "clonefunction", "cloneref", "compareinstances", "crypt.decrypt", "crypt.encrypt", "crypt.generatebytes",
+    "crypt.generatekey", "crypt.hash", "debug.getconstant", "debug.setconstant", "debug.setstack",
+    "fireclickdetector", "fireproximityprompt", "firesignal", "firetouch", "getcallingscript",
+    "getconnections", "getcustomasset", "gethiddenproperty", "gethui", "getinstances", "getnilinstances",
+    "getproperties", "getrawmetatable", "getscriptbytecode", "getscriptclosure", "getscripthash",
+    "getsenv", "getspecialinfo", "hookfunction", "hookmetamethod", "iscclosure", "islclosure",
+    "isexecutorclosure", "loadstring", "newcclosure", "readfile", "writefile", "appendfile",
+    "makefolder", "delfolder", "delfile", "isfile", "isfolder", "listfiles", "request", "http_request",
+    "syn_request", "WebSocket.connect", "Drawing.new", "isrenderobj", "getrenderproperty", "setrenderproperty",
+    "cleardrawcache", "getsynasset", "getcustomasset", "saveinstance", "messagebox", "setclipboard",
+    "getclipboard", "toclipboard", "queue_on_teleport", "syn_queue_on_teleport"
+}
+
+-- Convert to lookup table for faster checking
+local suncFunctionLookup = {}
+for _, func in ipairs(suncFunctions) do
+    suncFunctionLookup[func:lower()] = true
+end
+
 -- Create main ScreenGui
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "SUNCTestingGUI"
@@ -462,25 +488,64 @@ local updateStats
 local originalPrint = print
 local consoleOutput = {}
 
--- Function to extract function name from message
+-- Improved function detection
 local function extractFunctionName(message)
-    -- Try to extract function name from various message formats
+    -- Clean the message first
+    local cleanMessage = message:gsub("[✅❌ℹ️]", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    
+    -- More specific patterns for SUNC function detection
     local patterns = {
-        "([%w_%.]+)%s*:%s*[✅❌]",  -- functionname: ✅ or ❌
-        "([%w_%.]+)%s*[✅❌]",      -- functionname ✅ or ❌
-        "Testing%s+([%w_%.]+)",     -- Testing functionname
-        "Checking%s+([%w_%.]+)",    -- Checking functionname
-        "^([%w_%.]+)%s*$"           -- Just the function name
+        -- Direct function name patterns
+        "^([%w_%.]+)$",                    -- Just the function name
+        "^([%w_%.]+)%s*:%s*",             -- functionname: (with colon)
+        "^([%w_%.]+)%s+",                 -- functionname (with space)
+        "Testing%s+([%w_%.]+)",           -- Testing functionname
+        "Checking%s+([%w_%.]+)",          -- Checking functionname
+        "Function%s+([%w_%.]+)",          -- Function functionname
+        "^%s*([%w_%.]+)%s*%-",            -- functionname - (with dash)
     }
     
     for _, pattern in ipairs(patterns) do
-        local funcName = message:match(pattern)
+        local funcName = cleanMessage:match(pattern)
         if funcName then
-            return funcName:lower()
+            local lowerName = funcName:lower()
+            -- Only return if it's a known SUNC function
+            if suncFunctionLookup[lowerName] then
+                return lowerName
+            end
         end
     end
     
     return nil
+end
+
+-- Check if message is a function test result
+local function isFunctionTestResult(message)
+    -- Must contain success/fail indicator
+    if not (message:find("✅") or message:find("❌")) then
+        return false
+    end
+    
+    -- Must contain a recognizable function name
+    local funcName = extractFunctionName(message)
+    if not funcName then
+        return false
+    end
+    
+    -- Exclude common non-function messages
+    local excludePatterns = {
+        "script", "test", "loading", "starting", "completed", "finished",
+        "initializing", "setup", "environment", "checking environment"
+    }
+    
+    local lowerMessage = message:lower()
+    for _, pattern in ipairs(excludePatterns) do
+        if lowerMessage:find(pattern) then
+            return false
+        end
+    end
+    
+    return true
 end
 
 -- Override print to capture output
@@ -570,14 +635,17 @@ addConsoleLog = function(message)
     logCorner.CornerRadius = UDim.new(0, 4)
     logCorner.Parent = logFrame
     
-    -- Extract function name to avoid double counting
+    -- Check if this is a function test result
+    local isFunctionResult = isFunctionTestResult(message)
     local functionName = extractFunctionName(message)
-    local shouldCount = true
+    local shouldCount = false
     
-    if functionName and processedFunctions[functionName] then
-        shouldCount = false -- Don't count this function again
-    elseif functionName then
-        processedFunctions[functionName] = true
+    if isFunctionResult and functionName then
+        -- Only count if we haven't seen this function before
+        if not processedFunctions[functionName] then
+            processedFunctions[functionName] = true
+            shouldCount = true
+        end
     end
     
     -- Status indicator based on message content
@@ -587,21 +655,30 @@ addConsoleLog = function(message)
     statusIndicator.BackgroundTransparency = 1
     
     if message:find("✅") then
-        statusIndicator.Text = "✅"
-        statusIndicator.TextColor3 = Color3.fromRGB(100, 255, 100)
-        if shouldCount then
-            testResults.passed = testResults.passed + 1
+        if isFunctionResult then
+            statusIndicator.Text = "✅"
+            statusIndicator.TextColor3 = Color3.fromRGB(100, 255, 100)
+            if shouldCount then
+                testResults.passed = testResults.passed + 1
+            end
+        else
+            statusIndicator.Text = "ℹ️"
+            statusIndicator.TextColor3 = Color3.fromRGB(100, 200, 255)
         end
     elseif message:find("❌") then
-        statusIndicator.Text = "❌"
-        statusIndicator.TextColor3 = Color3.fromRGB(255, 100, 100)
-        if shouldCount then
-            testResults.failed = testResults.failed + 1
+        if isFunctionResult then
+            statusIndicator.Text = "❌"
+            statusIndicator.TextColor3 = Color3.fromRGB(255, 100, 100)
+            if shouldCount then
+                testResults.failed = testResults.failed + 1
+            end
+        else
+            statusIndicator.Text = "ℹ️"
+            statusIndicator.TextColor3 = Color3.fromRGB(100, 200, 255)
         end
     else
         statusIndicator.Text = "ℹ️"
         statusIndicator.TextColor3 = Color3.fromRGB(100, 200, 255)
-        shouldCount = false -- Don't count info messages
     end
     
     statusIndicator.TextSize = 16
@@ -645,12 +722,12 @@ addConsoleLog = function(message)
     -- Auto-scroll to bottom
     logsContainer.CanvasPosition = Vector2.new(0, logsContainer.CanvasSize.Y.Offset)
     
-    -- Update stats
-    updateStats()
-    
-    -- Update progress based on total functions tested (capped at total)
-    local totalTested = testResults.passed + testResults.failed
-    updateProgress(totalTested, testResults.total)
+    -- Update stats and progress only if this was a function result
+    if isFunctionResult and shouldCount then
+        updateStats()
+        local totalTested = testResults.passed + testResults.failed
+        updateProgress(totalTested, testResults.total)
+    end
 end
 
 -- Run SUNC test
@@ -765,7 +842,7 @@ mainFrame.InputBegan:Connect(function(input)
                 dragging = false
                 connection:Disconnect()
             end
-        end
+        end)
     end
 end)
 
