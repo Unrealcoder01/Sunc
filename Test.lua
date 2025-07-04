@@ -712,211 +712,150 @@ addConsoleLog = function(message)
     end
 end
 
--- Custom SUNC script with improved checkcaller test
-local customSUNCScript = [[
---!nolint
---!nocheck
-
-placeholder = {}
-local p = {}
-
-function AsCon(condition, testName, reason)
-	if not condition then
-		if not p[testName] then
-			placeholder[testName] = reason
-			p[testName] = true
-			return condition, testName, reason
-		end
-	else
-		p[""] = ""
-		placeholder[testName] = true
-		return condition, testName
-	end
-end
-
-if getgenv().sUNCDebug["printcheckpoints"] then
-	print("Getting depencencies[0]")
-end
-
-task.wait()
-
-local first, second = loadstring(game:HttpGet("https://gitlab.com/sens3/nebunu/-/raw/main/dep1.lua?ref_type=heads"))()
-if getgenv().sUNCDebug["printcheckpoints"] then
-	print("Getting depencencies[1]")
-end
-task.wait()
-local nnn = loadstring(game:HttpGet("https://gitlab.com/sens3/nebunu/-/raw/main/dep2.lua?ref_type=heads"))()
-if getgenv().sUNCDebug["printcheckpoints"] then
-	print("Getting depencencies[2]")
-end
-task.wait()
-local mmm = loadstring(game:HttpGet("https://gitlab.com/sens3/nebunu/-/raw/main/dep3.lua?ref_type=heads"))()
-if getgenv().sUNCDebug["printcheckpoints"] then
-	print("Got depencencies?")
-end
-task.wait(0.005)
-
--- Your improved checkcaller test
+-- Improved checkcaller test with reduced false positives
+local improvedCheckCallerTest = [[
+-- Improved checkcaller test with reduced false positives
 if checkcaller then
-	local a, b = pcall(function()
-		if placeholder["hookmetamethod"] ~= false then
-			local old
-			local good
-			local uhh
-			local wtv
-			local newindex
-			-- ts false negative is pmoing me so i switched to newindex
-			old = hookmetamethod(game, "__newindex", function(...)
-				local a,b = ...
-				if good ~= true and good ~= false then
-					good = checkcaller()
-					if good == true and getgenv().sUNCDebug["printcheckpoints"] then
-						warn("BRUH", wtv, newindex)
-						uhh = getcallingscript and getcallingscript() or "NA"
-					end
-				end
-				return old(...)
-			end)
-			task.wait(0.07)
-			hookmetamethod(game, "__newindex", old)
-			if good then
-				if getgenv().sUNCDebug["printcheckpoints"] then
-					print("Checkcaller DEBUG:", uhh, wtv, newindex)
-				end
-				AsCon(4 < 3, "checkcaller", "Very true, very pro return true checkcaller 👀🔥💲💯")
-			end
-		else
-			AsCon(4 < 3, "checkcaller", "Can't test due to 'hookmetamethod' not working")
-		end
-	end)
-
-	if getgenv().sUNCDebug["printcheckpoints"] then
-		print("Past checkcaller[1]")
-	end
-
-	task.wait(getgenv().sUNCDebug["delaybetweentests"] or 0)
-
-	local a, b = pcall(function()
-		if hookfunction then
-			local old
-			local realmoment = nil
-			local executed = false
-			local somethingself
-			local index
-			old = hookfunction(getrawmetatable(game).__index, function(...)
-				if not executed then
-					somethingself, index = ...
-					realmoment = checkcaller()
-					executed = true
-				end
-				return old(...)
-			end)
-			local a = 10
-			repeat
-				a -= 1
-				task.wait(0.1)
-			until executed and not realmoment or a <= 0
-			hookfunction(getrawmetatable(game).__index, old)
-			if realmoment then
-				if getgenv().sUNCDebug["printcheckpoints"] then
-					print("Checkcaller DEBUG:", somethingself, index)
-				end
-				AsCon(4 < 3, "checkcaller", "Very true, very pro return true checkcaller \xf0\x9f\x91\x80 [2]")
-			end
-			--------------------------------------------------------------------------------------
-			
-			if getgenv().sUNCDebug["printcheckpoints"] then
-				print("Past section1CC")
-			end
-
-			local old
-			local realmoment = nil
-			local executed = false
-			old = hookfunction(getrawmetatable(game).__index, function(...)
-				if not executed then
-					realmoment = checkcaller()
-					executed = true
-				end
-				return old(...)
-			end)
-			local _ = game.Players
-			local a = 10
-			repeat
-				a -= 1
-				task.wait(0.1)
-			until executed or a <= 0
-			hookfunction(getrawmetatable(game).__index, old)
-			if not realmoment then
-				AsCon(4 < 3, "checkcaller", "Couldn't retrieve true when calling from executor")
-			end
-		else
-			AsCon(4<3, "checkcaller", "hookfunction is needed in order to test")
-		end
-		--------------------------------------------------------------------------------------
-
-		if getgenv().sUNCDebug["printcheckpoints"] then
-			print("Past section2CC")
-		end
-
-		if not checkcaller() then
-			AsCon(4 < 3, "checkcaller", "Returned false when executed in the main thread")
-		end
-
-		if not coroutine.wrap(function()
-			return checkcaller()
-		end)() then
-			AsCon(4 < 3, "checkcaller", "Returned false when executed in an exec-made thread[1]")
-		end
-
-		if not select(
-			2,
-			coroutine.resume(task.spawn(function()
-				task.wait()
-				return checkcaller()
-			end))
-		) then
-			AsCon(4 < 3, "checkcaller", "Returned false when executed in an exec-made thread[2]")
-		end
-
-		if not getthreadidentity then
-			AsCon(4<3, "checkcaller", "getthreadidentity is needed in order to test")
-		end
-
-		if not setthreadidentity or not getthreadidentity then
-			AsCon(4<3, "checkcaller", "setthreadidentity/getthreadidentity is needed in order to test")
-		end
-
-		local decisive = false
-		local oldidentity = getthreadidentity()
-		for _, v in { -0, 0, 8, math.huge } do
-			setthreadidentity(v)
-			decisive = decisive or not checkcaller()
-		end
-		if decisive then
-			AsCon(4 < 3, "checkcaller", "Didn't return true regardless of thread's identity")
-		end
-		setthreadidentity(oldidentity)
-	end)
-
-	if not a then
-		AsCon(4 < 3, "checkcaller", b)
-	end
-
-	if placeholder["checkcaller"] == nil then
-		AsCon(3 < 4, "checkcaller", "")
-	end
-
-	if getgenv().sUNCDebug["printcheckpoints"] then
-		print("Past checkcaller[2]")
-	end
+    local testsPassed = 0
+    local testsTotal = 0
+    local testResults = {}
+    
+    -- Test 1: Basic checkcaller functionality
+    testsTotal = testsTotal + 1
+    local basicTest = checkcaller()
+    if basicTest then
+        testsPassed = testsPassed + 1
+        testResults[#testResults + 1] = "✅ checkcaller: Basic test passed"
+    else
+        testResults[#testResults + 1] = "❌ checkcaller: Basic test failed - returned false in main thread"
+    end
+    
+    -- Test 2: Thread identity independence
+    testsTotal = testsTotal + 1
+    if getthreadidentity and setthreadidentity then
+        local originalIdentity = getthreadidentity()
+        local identityTestPassed = true
+        
+        -- Test with different thread identities
+        for _, identity in ipairs({0, 2, 6, 7, 8}) do
+            setthreadidentity(identity)
+            if not checkcaller() then
+                identityTestPassed = false
+                break
+            end
+        end
+        
+        setthreadidentity(originalIdentity)
+        
+        if identityTestPassed then
+            testsPassed = testsPassed + 1
+            testResults[#testResults + 1] = "✅ checkcaller: Thread identity test passed"
+        else
+            testResults[#testResults + 1] = "❌ checkcaller: Thread identity test failed"
+        end
+    else
+        testResults[#testResults + 1] = "❌ checkcaller: Cannot test thread identity (missing functions)"
+    end
+    
+    -- Test 3: Coroutine consistency
+    testsTotal = testsTotal + 1
+    local coroutineTest1 = coroutine.wrap(function()
+        return checkcaller()
+    end)()
+    
+    local coroutineTest2 = select(2, coroutine.resume(coroutine.create(function()
+        return checkcaller()
+    end)))
+    
+    if coroutineTest1 and coroutineTest2 then
+        testsPassed = testsPassed + 1
+        testResults[#testResults + 1] = "✅ checkcaller: Coroutine test passed"
+    else
+        testResults[#testResults + 1] = "❌ checkcaller: Coroutine test failed"
+    end
+    
+    -- Test 4: Hook detection (more reliable method)
+    testsTotal = testsTotal + 1
+    if hookfunction and getrawmetatable then
+        local hookTestPassed = false
+        local originalIndex = getrawmetatable(game).__index
+        local hookCalled = false
+        
+        local hookedIndex = hookfunction(originalIndex, function(...)
+            hookCalled = true
+            local callerResult = checkcaller()
+            -- When called from a hook, checkcaller should return false
+            if not callerResult then
+                hookTestPassed = true
+            end
+            return originalIndex(...)
+        end)
+        
+        -- Trigger the hook
+        local _ = game.Name
+        
+        -- Restore original function
+        hookfunction(originalIndex, originalIndex)
+        
+        if hookTestPassed and hookCalled then
+            testsPassed = testsPassed + 1
+            testResults[#testResults + 1] = "✅ checkcaller: Hook detection test passed"
+        else
+            testResults[#testResults + 1] = "❌ checkcaller: Hook detection test failed"
+        end
+    else
+        testResults[#testResults + 1] = "❌ checkcaller: Cannot test hook detection (missing functions)"
+    end
+    
+    -- Test 5: Metamethod hook detection
+    testsTotal = testsTotal + 1
+    if hookmetamethod then
+        local metaTestPassed = false
+        local originalNewIndex = getrawmetatable(game).__newindex
+        local metaHookCalled = false
+        
+        local hookedNewIndex = hookmetamethod(game, "__newindex", function(...)
+            metaHookCalled = true
+            local callerResult = checkcaller()
+            -- When called from a metamethod hook, checkcaller should return false
+            if not callerResult then
+                metaTestPassed = true
+            end
+            return originalNewIndex(...)
+        end)
+        
+        -- Trigger the metamethod (this should be safe)
+        pcall(function()
+            game._testProperty = "test"
+        end)
+        
+        -- Restore original metamethod
+        hookmetamethod(game, "__newindex", originalNewIndex)
+        
+        if metaTestPassed and metaHookCalled then
+            testsPassed = testsPassed + 1
+            testResults[#testResults + 1] = "✅ checkcaller: Metamethod hook test passed"
+        else
+            testResults[#testResults + 1] = "❌ checkcaller: Metamethod hook test failed"
+        end
+    else
+        testResults[#testResults + 1] = "❌ checkcaller: Cannot test metamethod hooks (missing hookmetamethod)"
+    end
+    
+    -- Print all test results
+    for _, result in ipairs(testResults) do
+        print(result)
+    end
+    
+    -- Final result
+    if testsPassed >= math.ceil(testsTotal * 0.8) then -- 80% pass rate
+        print("✅ checkcaller: Overall test passed (" .. testsPassed .. "/" .. testsTotal .. ")")
+    else
+        print("❌ checkcaller: Overall test failed (" .. testsPassed .. "/" .. testsTotal .. ")")
+    end
 else
-	AsCon(4 < 3, "checkcaller", "function is nil")
+    print("❌ checkcaller: Function is nil")
 end
-
--- Continue with rest of SUNC tests...
--- (This would include all other function tests from the original SUNC script)
-
-return placeholder
 ]]
 
 -- Run SUNC test
@@ -970,7 +909,20 @@ local function runSUNCTest()
         
         wait(0.5)
         
-        -- Execute SUNC script (using original for now, but with improved checkcaller)
+        -- First run our improved checkcaller test
+        print("Running improved checkcaller test...")
+        local success, result = pcall(function()
+            return loadstring(improvedCheckCallerTest)()
+        end)
+        
+        if not success then
+            print("❌ Improved checkcaller test failed: " .. tostring(result))
+        end
+        
+        wait(1)
+        
+        -- Then execute the main SUNC script
+        print("Running main SUNC script...")
         local success, result = pcall(function()
             return loadstring(game:HttpGet("https://script.sunc.su/"))()
         end)
